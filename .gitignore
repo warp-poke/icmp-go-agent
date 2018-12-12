@@ -10,3 +10,9 @@
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+
+config.yml
+vendor/
+build/
+vendor/
+icmp-go-agent
