@@ -19,10 +19,21 @@ func NewConsumer() <-chan *models.SchedulerEvent {
 	config := cluster.NewConfig()
 	config.Consumer.Return.Errors = true
 	config.Group.Return.Notifications = true
-	config.Config.Net.TLS.Enable = true
-	config.Config.Net.SASL.Enable = true
-	config.Config.Net.SASL.User = viper.GetString("kafka.user")
-	config.Config.Net.SASL.Password = viper.GetString("kafka.password")
+	config.Config.Net.SASL.Enable = false
+	config.Config.Net.TLS.Enable = false
+
+	saslEnable := viper.GetBool("kafka.sasl.enable")
+	if saslEnable {
+		config.Config.Net.SASL.Enable = true
+		config.Config.Net.SASL.User = viper.GetString("kafka.user")
+		config.Config.Net.SASL.Password = viper.GetString("kafka.password")
+	}
+
+	tlsEnable := viper.GetBool("kafka.tls.enable")
+	if tlsEnable {
+		config.Config.Net.TLS.Enable = true
+	}
+
 	config.ClientID = "poke.icmp-checker"
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 	config.Consumer.Offsets.CommitInterval = 10 * time.Second

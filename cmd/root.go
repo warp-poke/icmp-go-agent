@@ -45,6 +45,8 @@ func initConfig() {
 	viper.AutomaticEnv()
 
 	viper.SetDefault("timeout", "1s")
+	viper.SetDefault("kafka.sasl.enable", false)
+	viper.SetDefault("kafka.tls.enable", false)
 
 	// Set config search path
 	viper.AddConfigPath("/etc/poke-icmp-agent/")
