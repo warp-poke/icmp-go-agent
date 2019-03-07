@@ -22,11 +22,11 @@ build: poke-icmp-agent.go $$(call rwildcard, ./cmd, *.go) $$(call rwildcard, ./c
 	$(CC) $(DFLAGS) -ldflags "$(CFLAGS)" -o $(BUILD_DIR)/poke-icmp-agent poke-icmp-agent.go
 
 .PHONY: release
-release: warp-poke.go $$(call rwildcard, ./cmd, *.go) $$(call rwildcard, ./core, *.go)
+release: poke-icmp-agent.go $$(call rwildcard, ./cmd, *.go) $$(call rwildcard, ./core, *.go)
 	$(CC) -ldflags "$(CFLAGS)" -o $(BUILD_DIR)/poke-icmp-agent poke-icmp-agent.go
 
 .PHONY: dist
-dist: warp-poke.go $$(call rwildcard, ./cmd, *.go) $$(call rwildcard, ./core, *.go)
+dist: poke-icmp-agent.go $$(call rwildcard, ./cmd, *.go) $$(call rwildcard, ./core, *.go)
 	$(CROSS) $(CC) -ldflags "$(CFLAGS) -s -w" -o $(BUILD_DIR)/poke-icmp-agent poke-icmp-agent.go
 
 .PHONY: lint

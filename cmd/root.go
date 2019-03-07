@@ -15,9 +15,14 @@
 package cmd
 
 import (
+	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 
+	"github.com/labstack/echo"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -27,10 +32,37 @@ import (
 var cfgFile string
 var verbose bool
 
+var (
+	schedulerEventsCounter = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "icmp_agent",
+		Subsystem: "scheduler",
+		Name:      "events_total",
+		Help:      "Number of events process by the scheduler",
+	})
+
+	schedulerDomainEventsCounterVec = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "icmp_agent",
+		Subsystem: "scheduler",
+		Name:      "domain_events",
+		Help:      "Number of events process by the scheduler",
+	}, []string{"domain"})
+
+	schedulerEventsErrorCounter = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "icmp_agent",
+		Subsystem: "scheduler",
+		Name:      "events_error",
+		Help:      "Number of events process by the scheduler",
+	})
+)
+
 func init() {
 	cobra.OnInitialize(initConfig)
 	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file to use")
 	RootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+
+	prometheus.MustRegister(schedulerEventsCounter)
+	prometheus.MustRegister(schedulerEventsErrorCounter)
+	prometheus.MustRegister(schedulerDomainEventsCounterVec)
 
 	viper.BindPFlags(RootCmd.Flags())
 }
@@ -47,6 +79,9 @@ func initConfig() {
 	viper.SetDefault("timeout", "1s")
 	viper.SetDefault("kafka.sasl.enable", false)
 	viper.SetDefault("kafka.tls.enable", false)
+
+	viper.SetDefault("metrics.host", "127.0.0.1")
+	viper.SetDefault("metrics.port", "9111")
 
 	// Set config search path
 	viper.AddConfigPath("/etc/poke-icmp-agent/")
@@ -87,19 +122,37 @@ var RootCmd = &cobra.Command{
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, os.Interrupt)
 
+		metricsServer := echo.New()
+		metricsServer.GET("/metrics", echo.WrapHandler(promhttp.Handler()))
+
+		go func() {
+			host := viper.GetString("metrics.host")
+			port := viper.GetInt("metrics.port")
+			if err := metricsServer.Start(fmt.Sprintf("%s:%d", host, port)); err != nil && err != http.ErrServerClosed {
+				log.WithError(err).Error("could not start the metrics server")
+			}
+		}()
+
 		for {
 			select {
 			case se := <-schedulerEvents:
+				schedulerEventsCounter.Inc()
+				schedulerDomainEventsCounterVec.WithLabelValues(se.Domain).Inc()
 				log.WithFields(log.Fields{
 					"event": se,
 				}).Info("process new scheduler event")
 				if err := core.Process(se, pingTimeout); err != nil {
+					schedulerEventsErrorCounter.Inc()
 					log.WithError(err).Error("Failed to process scheduler event")
 					continue
 				}
 
 			case sig := <-quit:
 				log.WithField("signal", sig.String()).Println("received signal. exiting")
+				if err := metricsServer.Close(); err != nil {
+					log.WithError(err).Error("could not stop metrics server")
+				}
+
 				os.Exit(1)
 			}
 		}
